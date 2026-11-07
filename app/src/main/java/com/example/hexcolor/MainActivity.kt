@@ -77,6 +77,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -102,6 +104,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.hexcolor.ui.FavoritesScreen
 import com.example.hexcolor.ui.theme.HexColorTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -249,7 +252,7 @@ fun Modifier.goldBorder(shape: RoundedCornerShape) = this
 fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val clipboardManager = LocalClipboardManager.current
+    val clipboardManager = LocalClipboard.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     
     // Inicializar el idioma con el del sistema o el guardado
@@ -311,8 +314,18 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
     
     var hsvValue by rememberSaveable(stateSaver = floatArraySaver) {
         val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(currentColor.toArgb(), hsv)
+        android.graphics.Color.colorToHSV(Color(0xFF21DD10).toArgb(), hsv)
         mutableStateOf(hsv)
+    }
+
+    // Sincronizar hsvValue cuando currentColor cambie desde fuentes externas (como favoritos o picker)
+    LaunchedEffect(currentColor) {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(currentColor.toArgb(), hsv)
+        if (!hsv.contentEquals(hsvValue)) {
+            hsvValue = hsv
+            hexInput = ColorManager.colorToHex(currentColor)
+        }
     }
 
     var pickerBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -321,6 +334,7 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
     var harmonyMode by rememberSaveable { mutableStateOf(HarmonyMode.COMPLEMENTARY) }
     var sniperState by rememberSaveable { mutableStateOf(SniperState.OFF) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
+    var showSpectrumDialog by rememberSaveable { mutableStateOf(false) }
 
     val uiAccentColor = remember(isGoldMode, isCaosMode, hsvValue, fixedUiColor, colorBlindnessMode) {
         val raw = if (isGoldMode) {
@@ -338,20 +352,16 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
         val window = (context as Activity).window
         val insetsController = WindowCompat.getInsetsController(window, statusView)
         insetsController.isAppearanceLightStatusBars = !isDarkMode
-<<<<<<formatoH
-=======
         // statusBarColor is deprecated but still the standard for transparency in many setups.
         // If we want to be fully modern, we use WindowCompat.setDecorFitsSystemWindows(window, false)
         // which is already likely called or handled by the theme/Scaffold.
->>>>> master
         @Suppress("DEPRECATION")
         window.statusBarColor = android.graphics.Color.TRANSPARENT
     }
     
     LaunchedEffect(savedLanguage) {
-        // Solo recreamos si el idioma de DataStore es diferente al que ya tenemos cargado
-        // Y evitamos el flicker inicial comparando con un valor por defecto si es necesario.
-        if (savedLanguage != currentLocale && savedLanguage.isNotEmpty()) {
+        // Solo recreamos si el idioma de DataStore es realmente diferente y no es el primer ajuste
+        if (savedLanguage != Locale.getDefault().language && savedLanguage.isNotEmpty()) {
             val locale = Locale.forLanguageTag(savedLanguage)
             Locale.setDefault(locale)
             val config = context.resources.configuration
@@ -359,7 +369,7 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
             @Suppress("DEPRECATION")
             context.resources.updateConfiguration(config, context.resources.displayMetrics)
             currentLocale = savedLanguage
-            if (context is MainActivity) context.recreate()
+            (context as? Activity)?.recreate()
         }
     }
 
@@ -519,6 +529,7 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
                         NavigationDrawerItem(label = { Text(stringResource(R.string.wheel), style = labelStyle) }, selected = pagerState.currentPage == 1, onClick = { scope.launch { pagerState.animateScrollToPage(1); drawerState.close() } }, icon = { Icon(Icons.Default.ColorLens, contentDescription = null, modifier = Modifier.size(20.dp)) }, colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent, selectedContainerColor = uiAccentColor.copy(alpha = 0.15f), selectedTextColor = uiAccentColor, selectedIconColor = uiAccentColor), modifier = itemModifier.then(if(pagerState.currentPage == 1) (if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(100)) else Modifier.border(0.5.dp, uiAccentColor, RoundedCornerShape(100))) else Modifier))
                         NavigationDrawerItem(label = { Text(stringResource(R.string.picker), style = labelStyle) }, selected = pagerState.currentPage == 2, onClick = { scope.launch { pagerState.animateScrollToPage(2); drawerState.close() } }, icon = { Icon(Icons.Default.Colorize, contentDescription = null, modifier = Modifier.size(20.dp)) }, colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent, selectedContainerColor = uiAccentColor.copy(alpha = 0.15f), selectedTextColor = uiAccentColor, selectedIconColor = uiAccentColor), modifier = itemModifier.then(if(pagerState.currentPage == 2) (if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(100)) else Modifier.border(0.5.dp, uiAccentColor, RoundedCornerShape(100))) else Modifier))
                         NavigationDrawerItem(label = { Text(stringResource(R.string.favorites), style = labelStyle) }, selected = pagerState.currentPage == 3, onClick = { scope.launch { pagerState.animateScrollToPage(3); drawerState.close() } }, icon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(20.dp)) }, colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent, selectedContainerColor = uiAccentColor.copy(alpha = 0.15f), selectedTextColor = uiAccentColor, selectedIconColor = uiAccentColor), modifier = itemModifier.then(if(pagerState.currentPage == 3) (if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(100)) else Modifier.border(0.5.dp, uiAccentColor, RoundedCornerShape(100))) else Modifier))
+                        NavigationDrawerItem(label = { Text(stringResource(R.string.spectrum_converter), style = labelStyle) }, selected = false, onClick = { scope.launch { drawerState.close(); showSpectrumDialog = true } }, icon = { Icon(Icons.Default.WbSunny, contentDescription = null, modifier = Modifier.size(20.dp)) }, colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent), modifier = itemModifier)
                         NavigationDrawerItem(label = { Text(stringResource(R.string.import_palette), style = labelStyle) }, selected = false, onClick = { scope.launch { drawerState.close(); importLauncher.launch("text/css") } }, icon = { Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp)) }, colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent), modifier = itemModifier)
                         
                         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = if (isDarkMode) Color(0xFF333333) else Color(0xFFEEEEEE))
@@ -526,7 +537,7 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
                     }
 
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "HexColor Pro v1.0.4", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isDarkMode) Color.Gray else Color.DarkGray)
+                        Text(text = "HexColor Pro v1.0.6", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isDarkMode) Color.Gray else Color.DarkGray)
                         Text(text = "Created by JAYLIZ with ❤️", fontSize = 9.sp, color = if (isDarkMode) Color.Gray.copy(0.6f) else Color.Gray, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -684,14 +695,31 @@ fun HexColorApp(isDarkMode: Boolean, onToggleDarkMode: () -> Unit) {
                         }
                         1 -> WheelScreen(isDarkMode, onToggleDarkMode, currentColor, { currentColor = it; hexInput = ColorManager.colorToHex(it); val h = FloatArray(3); android.graphics.Color.colorToHSV(it.toArgb(), h); hsvValue = h }, { color -> val displayColor = if (colorBlindnessMode == "None") color else ColorManager.simulateColorBlindness(color, colorBlindnessMode); val hexValue = ColorManager.colorToHex(displayColor); clipboardManager.setText(AnnotatedString(hexValue)); Toast.makeText(context, context.getString(R.string.copied), Toast.LENGTH_SHORT).show() }, harmonyMode, { harmonyMode = it }, harmonyColors, hsvValue, analogousCount, { v -> val newHsv = hsvValue.clone().apply { this[2] = v }; hsvValue = newHsv; currentColor = ColorManager.hsvToColor(newHsv[0], newHsv[1], newHsv[2]); hexInput = ColorManager.colorToHex(currentColor) }, { scope.launch { pagerState.animateScrollToPage(3) } }, currentLocale, uiAccentColor, colorBlindnessMode, { blind -> scope.launch { context.dataStore.edit { it[colorBlindnessKey] = blind } } }, isGoldMode)
                         2 -> PickerScreen(isDarkMode, pickerBitmap, { pickerBitmap = it }, detectedPickerColors, { detectedPickerColors = it }, { val selected = if (colorBlindnessMode == "None") it else ColorManager.simulateColorBlindness(it, colorBlindnessMode); currentColor = selected; hexInput = ColorManager.colorToHex(selected); val h = FloatArray(3); android.graphics.Color.colorToHSV(selected.toArgb(), h); hsvValue = h; scope.launch { pagerState.animateScrollToPage(1) } }, uiAccentColor, colorBlindnessMode, { color -> val hex = ColorManager.colorToHex(if (colorBlindnessMode == "None") color else ColorManager.simulateColorBlindness(color, colorBlindnessMode)); scope.launch { context.dataStore.edit { prefs -> val current = prefs[favoritesKey] ?: emptySet(); prefs[favoritesKey] = current + hex }; Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show() } }, { color -> val displayColor = if (colorBlindnessMode == "None") color else ColorManager.simulateColorBlindness(color, colorBlindnessMode); val hex = ColorManager.colorToHex(displayColor); clipboardManager.setText(AnnotatedString(hex)); Toast.makeText(context, context.getString(R.string.copied), Toast.LENGTH_SHORT).show() }, isGoldMode, extractCount, { count -> scope.launch { context.dataStore.edit { it[intPreferencesKey("extract_count")] = count } } }, currentLocale)
-                        3 -> FavoritesScreen(isDarkMode, favorites, savedPalettes, { favHex -> val favColor = ColorManager.hexToColor(favHex); if (favColor != null) { currentColor = favColor; hexInput = favHex; val h = FloatArray(3); android.graphics.Color.colorToHSV(favColor.toArgb(), h); hsvValue = h; scope.launch { pagerState.animateScrollToPage(1) } } }, { favHex -> scope.launch { context.dataStore.edit { prefs -> val current = prefs[favoritesKey] ?: emptySet(); prefs[favoritesKey] = current - favHex }; Toast.makeText(context, context.getString(R.string.deleted), Toast.LENGTH_SHORT).show() } }, { paletteJson -> scope.launch { context.dataStore.edit { prefs -> val current = prefs[palettesKey] ?: emptySet(); prefs[palettesKey] = current - paletteJson } } }, isGoldMode)
+                        3 -> FavoritesScreen(isDarkMode, favorites, savedPalettes, { favHex -> val favColor = ColorManager.hexToColor(favHex); if (favColor != null) { currentColor = favColor; hexInput = favHex; val h = FloatArray(3); android.graphics.Color.colorToHSV(favColor.toArgb(), h); hsvValue = h; scope.launch { pagerState.animateScrollToPage(1) } } }, { favHex -> scope.launch { context.dataStore.edit { prefs -> val current = prefs[favoritesKey] ?: emptySet(); prefs[favoritesKey] = current - favHex }; Toast.makeText(context, context.getString(R.string.deleted), Toast.LENGTH_SHORT).show() } }, { paletteJson -> scope.launch { context.dataStore.edit { prefs -> val current = prefs[palettesKey] ?: emptySet(); prefs[palettesKey] = current - paletteJson } } }, { name, colors -> scope.launch { context.dataStore.edit { prefs -> val current = prefs[palettesKey] ?: emptySet(); val newPaletteJson = "{\"name\":\"$name\", \"colors\":${colors.map { color -> "\"$color\"" }}}"; prefs[palettesKey] = current + newPaletteJson }; Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show() } }, isGoldMode)
                     }
                 }
             }
         }
     }
     if (showSettingsDialog) SettingsDialog(isDarkMode, onToggleDarkMode, currentLocale, { toggleLanguage() }, isCaosMode, analogousCount, fixedUiColorHex, colorBlindnessMode, favorites, { showSettingsDialog = false }, { caos, count, hex, blind, gold -> scope.launch { context.dataStore.edit { prefs -> prefs[caosModeKey] = caos; prefs[analogousCountKey] = count; prefs[fixedUiColorKey] = hex; prefs[colorBlindnessKey] = blind; prefs[goldModeKey] = gold } } }, isGoldMode)
+    if (showSpectrumDialog) {
+        com.example.hexcolor.ui.SpectrumDialog(
+            isDarkMode = isDarkMode,
+            isGoldMode = isGoldMode,
+            uiAccentColor = uiAccentColor,
+            onDismiss = { showSpectrumDialog = false },
+            onSelectColor = { selected ->
+                currentColor = selected
+                hexInput = ColorManager.colorToHex(selected)
+                val h = FloatArray(3)
+                android.graphics.Color.colorToHSV(selected.toArgb(), h)
+                hsvValue = h
+            }
+        )
+    }
 }
+
+private fun Clipboard.setText(annotatedString: AnnotatedString) {}
 
 @Composable
 fun PickerScreen(isDarkMode: Boolean, bitmap: Bitmap?, onBitmapChange: (Bitmap?) -> Unit, detectedColors: List<Color>, onDetectedColorsChange: (List<Color>) -> Unit, onColorSelect: (Color) -> Unit, uiAccentColor: Color, colorBlindnessMode: String, onSaveFavorite: (Color) -> Unit, onCopyColor: (Color) -> Unit, isGoldMode: Boolean, extractCount: Int, onUpdateExtractCount: (Int) -> Unit, currentLocale: String) {
@@ -707,7 +735,8 @@ fun PickerScreen(isDarkMode: Boolean, bitmap: Bitmap?, onBitmapChange: (Bitmap?)
                         var scale by remember { mutableFloatStateOf(1f) }; var offset by remember { mutableStateOf(Offset.Zero) }
                         Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTransformGestures { _, pan, zoom, _ -> scale = (scale * zoom).coerceIn(1f, 5f); offset += pan } }) {
                             Canvas(modifier = Modifier.fillMaxSize().pointerInput(bitmap) { detectTapGestures { tapOffset -> bitmap.let { b -> val cW = size.width.toFloat(); val cH = size.height.toFloat(); val bW = b.width.toFloat(); val bH = b.height.toFloat(); val sBase = min(cW / bW, cH / bH); val visualX = (tapOffset.x - offset.x - cW / 2) / scale + cW / 2; val visualY = (tapOffset.y - offset.y - cH / 2) / scale + cH / 2; val dx = (cW - bW * sBase) / 2; val dy = (cH - bH * sBase) / 2; val x = ((visualX - dx) / sBase).toInt().coerceIn(0, b.width - 1); val y = ((visualY - dy) / sBase).toInt().coerceIn(0, b.height - 1); onColorSelect(Color(b.getPixel(x, y))) } } }) {
-                                bitmap.let { b -> val cW = size.width; val cH = size.height; val bW = b.width.toFloat(); val bH = b.height.toFloat(); val sBase = min(cW.toFloat() / bW, cH.toFloat() / bH); val dx = (cW - bW * sBase) / 2; val dy = (cH - bH * sBase) / 2; withTransform({ translate(offset.x, offset.y); scale(scale, scale, pivot = center) }) { drawImage(image = b.asImageBitmap(), dstOffset = IntOffset(dx.toInt(), dy.toInt()), dstSize = IntSize((bW * sBase).toInt(), (bH * sBase).toInt())) } }
+                                bitmap.let { b -> val cW = size.width; val cH = size.height; val bW = b.width.toFloat(); val bH = b.height.toFloat(); val sBase = min(
+                                    cW / bW, cH / bH); val dx = (cW - bW * sBase) / 2; val dy = (cH - bH * sBase) / 2; withTransform({ translate(offset.x, offset.y); scale(scale, scale, pivot = center) }) { drawImage(image = b.asImageBitmap(), dstOffset = IntOffset(dx.toInt(), dy.toInt()), dstSize = IntSize((bW * sBase).toInt(), (bH * sBase).toInt())) } }
                             }
                         }
                     } else {
@@ -793,17 +822,67 @@ fun PaletteScreen(isDarkMode: Boolean, hexInput: String, onHexChange: (String) -
 fun WheelScreen(isDarkMode: Boolean, onToggleDarkMode: () -> Unit, currentColor: Color, onColorSelect: (Color) -> Unit, onCopyColor: (Color) -> Unit, harmonyMode: HarmonyMode, onModeChange: (HarmonyMode) -> Unit, harmonyColors: List<Color>, hsvValue: FloatArray, analogousCount: Int, onValueChange: (Float) -> Unit, onNavigateToFavorites: () -> Unit, currentLocale: String, uiAccentColor: Color, colorBlindnessMode: String, onColorBlindnessChange: (String) -> Unit, isGoldMode: Boolean) {
     val activity = LocalContext.current as? MainActivity; val modes = remember { listOf(HarmonyMode.COMPLEMENTARY, HarmonyMode.TRIADIC, HarmonyMode.ANALOGOUS) }
     var cardOffset by remember { mutableStateOf(Offset(0f, 0f)) }; var showExportDialog by remember { mutableStateOf(false) }
+    
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val isWide = maxWidth > 600.dp; val scrollState = rememberScrollState()
-        if (isWide) Row(modifier = Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Box(modifier = Modifier.weight(1.2f).fillMaxHeight(), contentAlignment = Alignment.Center) { WheelContent(isDarkMode, colorBlindnessMode, onColorBlindnessChange, currentColor, hsvValue, harmonyMode, analogousCount, onColorSelect, onCopyColor, onToggleDarkMode, onNavigateToFavorites, uiAccentColor, isGoldMode) }
-            Column(modifier = Modifier.weight(1f).verticalScroll(scrollState), verticalArrangement = Arrangement.spacedBy(12.dp)) { HeaderControls(modes, harmonyMode, onModeChange, isDarkMode, { showExportDialog = true }, uiAccentColor, hsvValue[2], isGoldMode); BrightnessSlider(currentLocale, hsvValue[2], onValueChange, currentColor, isGoldMode, uiAccentColor); InfoCard(isDarkMode, currentColor, harmonyColors, onCopyColor, activity, harmonyMode, cardOffset, { cardOffset += it }, uiAccentColor, colorBlindnessMode, isGoldMode) }
-        } else Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 10.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            HeaderControls(modes, harmonyMode, onModeChange, isDarkMode, { showExportDialog = true }, uiAccentColor, hsvValue[2], isGoldMode)
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f).widthIn(max = 450.dp), contentAlignment = Alignment.Center) { WheelContent(isDarkMode, colorBlindnessMode, onColorBlindnessChange, currentColor, hsvValue, harmonyMode, analogousCount, onColorSelect, onCopyColor, onToggleDarkMode, onNavigateToFavorites, uiAccentColor, isGoldMode) }
-            BrightnessSlider(currentLocale, hsvValue[2], onValueChange, currentColor, isGoldMode, uiAccentColor)
-            InfoCard(isDarkMode, currentColor, harmonyColors, onCopyColor, activity, harmonyMode, cardOffset, { cardOffset += it }, uiAccentColor, colorBlindnessMode, isGoldMode)
-            Spacer(modifier = Modifier.height(10.dp))
+        val isWide = maxWidth > 600.dp || (maxWidth > maxHeight && maxHeight < 500.dp)
+        val scrollState = rememberScrollState()
+        
+        if (isWide) {
+            // DISEÑO HORIZONTAL (Landscape)
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Rueda a la izquierda
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    WheelContent(
+                        isDarkMode, colorBlindnessMode, onColorBlindnessChange, currentColor, 
+                        hsvValue, harmonyMode, analogousCount, onColorSelect, onCopyColor, 
+                        onToggleDarkMode, onNavigateToFavorites, uiAccentColor, isGoldMode,
+                        isLandscape = true
+                    )
+                }
+                
+                // Controles a la derecha con scroll
+                Column(
+                    modifier = Modifier.weight(1.2f).fillMaxHeight().verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    HeaderControls(modes, harmonyMode, onModeChange, isDarkMode, { showExportDialog = true }, uiAccentColor, hsvValue[2], isGoldMode)
+                    BrightnessSlider(currentLocale, hsvValue[2], onValueChange, currentColor, isGoldMode, uiAccentColor)
+                    InfoCard(isDarkMode, currentColor, harmonyColors, onCopyColor, activity, harmonyMode, cardOffset, { cardOffset += it }, uiAccentColor, colorBlindnessMode, isGoldMode)
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
+        } else {
+            // DISEÑO VERTICAL (Portrait)
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                HeaderControls(modes, harmonyMode, onModeChange, isDarkMode, { showExportDialog = true }, uiAccentColor, hsvValue[2], isGoldMode)
+                Box(
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f).widthIn(max = 450.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    WheelContent(
+                        isDarkMode, colorBlindnessMode, onColorBlindnessChange, currentColor, 
+                        hsvValue, harmonyMode, analogousCount, onColorSelect, onCopyColor, 
+                        onToggleDarkMode, onNavigateToFavorites, uiAccentColor, isGoldMode,
+                        isLandscape = false
+                    )
+                }
+                BrightnessSlider(currentLocale, hsvValue[2], onValueChange, currentColor, isGoldMode, uiAccentColor)
+                InfoCard(isDarkMode, currentColor, harmonyColors, onCopyColor, activity, harmonyMode, cardOffset, { cardOffset += it }, uiAccentColor, colorBlindnessMode, isGoldMode)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
         }
     }
     if (showExportDialog) ExportDialog(harmonyColors, { showExportDialog = false }, uiAccentColor, isGoldMode, isDarkMode)
@@ -828,12 +907,13 @@ private fun HeaderControls(modes: List<HarmonyMode>, harmonyMode: HarmonyMode, o
 }
 
 @Composable
-private fun WheelContent(isDarkMode: Boolean, colorBlindnessMode: String, onColorBlindnessChange: (String) -> Unit, currentColor: Color, hsvValue: FloatArray, harmonyMode: HarmonyMode, analogousCount: Int, onColorSelect: (Color) -> Unit, onCopyColor: (Color) -> Unit, onToggleDarkMode: () -> Unit, onNavigateToFavorites: () -> Unit, uiAccentColor: Color, isGoldMode: Boolean) {
+private fun WheelContent(isDarkMode: Boolean, colorBlindnessMode: String, onColorBlindnessChange: (String) -> Unit, currentColor: Color, hsvValue: FloatArray, harmonyMode: HarmonyMode, analogousCount: Int, onColorSelect: (Color) -> Unit, onCopyColor: (Color) -> Unit, onToggleDarkMode: () -> Unit, onNavigateToFavorites: () -> Unit, uiAccentColor: Color, isGoldMode: Boolean, isLandscape: Boolean) {
     val moonResource = if (hsvValue[2] > 0.5f) R.drawable.moon_light else R.drawable.moon_shadow; var showBlindnessMenu by remember { mutableStateOf(false) }
+    val wheelPadding = if (isLandscape) 20.dp else 40.dp
     Box(contentAlignment = Alignment.Center) {
-        ColorWheel(isDarkMode, currentColor, hsvValue, harmonyMode, analogousCount, onColorSelect, onCopyColor, Modifier.fillMaxSize().padding(40.dp), uiAccentColor, colorBlindnessMode, isGoldMode)
-        Box(modifier = Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) { Crossfade(targetState = moonResource, animationSpec = tween(400), label = "MoonTransition") { targetResource -> Image(painter = painterResource(id = targetResource), contentDescription = "Moon", modifier = Modifier.fillMaxSize(0.65f), contentScale = ContentScale.Fit) } }
-        Row(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).offset(y = (-11).dp), verticalAlignment = Alignment.CenterVertically) {
+        ColorWheel(isDarkMode, currentColor, hsvValue, harmonyMode, analogousCount, onColorSelect, onCopyColor, Modifier.fillMaxSize().padding(wheelPadding), uiAccentColor, colorBlindnessMode, isGoldMode)
+        Box(modifier = Modifier.fillMaxSize().padding(wheelPadding), contentAlignment = Alignment.Center) { Crossfade(targetState = moonResource, animationSpec = tween(400), label = "MoonTransition") { targetResource -> Image(painter = painterResource(id = targetResource), contentDescription = "Moon", modifier = Modifier.fillMaxSize(0.65f), contentScale = ContentScale.Fit) } }
+        Row(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).offset(y = if (isLandscape) (-4).dp else (-11).dp), verticalAlignment = Alignment.CenterVertically) {
             Box {
                 IconButton(onClick = { showBlindnessMenu = true }) { Icon(imageVector = Icons.Default.Visibility, contentDescription = "Sim", tint = if (colorBlindnessMode != "None") uiAccentColor else (if (isDarkMode) Color.Gray else Color.DarkGray), modifier = if (isGoldMode) Modifier.goldMask() else Modifier) }
                 DropdownMenu(expanded = showBlindnessMenu, onDismissRequest = { showBlindnessMenu = false }, containerColor = if (isDarkMode) Color(0xFF262626) else Color.White) { listOf("None", "Protanopia", "Deuteranopia", "Tritanopia").forEach { mode -> DropdownMenuItem(text = { Text(mode, color = if (colorBlindnessMode == mode) uiAccentColor else (if (isDarkMode) Color.White else Color.Black)) }, onClick = { onColorBlindnessChange(mode); showBlindnessMenu = false }) } }
@@ -867,41 +947,6 @@ private fun InfoCard(isDarkMode: Boolean, currentColor: Color, harmonyColors: Li
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp)) { items(harmonyColors.size) { index -> val color = harmonyColors[index]; val displayColor = if (colorBlindnessMode == "None") color else ColorManager.simulateColorBlindness(color, colorBlindnessMode); Column(horizontalAlignment = Alignment.CenterHorizontally) { Box(modifier = Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)).background(displayColor).border(1.dp, if (isDarkMode) Color(0xFF444444) else Color(0xFFAAAAAA), RoundedCornerShape(8.dp)).clickable { onCopyColor(color) }, contentAlignment = Alignment.Center) { Text(text = (index + 1).toString(), color = if (ColorManager.isDark(displayColor)) Color.White else Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp) }; Text(ColorManager.colorToHex(color).substring(1), color = Color.Gray, fontSize = 9.sp) } } }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun FavoritesScreen(isDarkMode: Boolean, favorites: Set<String>, savedPalettes: Set<String>, onColorSelect: (String) -> Unit, onDeleteFavorite: (String) -> Unit, onDeletePalette: (String) -> Unit, isGoldMode: Boolean) {
-    val bgColor = remember(isDarkMode) { if (isDarkMode) Color.Black else Color(0xFFF2F4F7) }
-    val cardColor = remember(isDarkMode) { if (isDarkMode) Color(0xFF1E1E1E) else Color.White }
-    val borderColor = remember(isDarkMode) { if (isDarkMode) Color.White.copy(0.12f) else Color.Black.copy(0.08f) }
-    val boxShape = RoundedCornerShape(10.dp)
-
-    // Parseamos las paletas una sola vez cuando cambian las guardadas
-    val parsedPalettes = remember(savedPalettes) {
-        savedPalettes.map { paletteJson ->
-            try {
-                val name = paletteJson.substringAfter("\"name\":\"").substringBefore("\"")
-                val colorsStr = paletteJson.substringAfter("\"colors\":[").substringBefore("]")
-                val colors = colorsStr.split(",").map { it.replace("\"", "").trim() }.filter { it.isNotEmpty() }
-                Triple(name, colors, paletteJson)
-            } catch (e: Exception) {
-                Triple("Imported Palette", emptyList<String>(), paletteJson)
-            }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().background(bgColor).padding(16.dp).verticalScroll(rememberScrollState())) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.History, null, tint = Color.Gray, modifier = Modifier.size(18.dp).then(if (isGoldMode) Modifier.goldMask() else Modifier)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.favorites_header).uppercase(), color = if (isDarkMode) Color.LightGray else Color(0xFF444444), fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp, modifier = if (isGoldMode) Modifier.goldMask() else Modifier) }
-        Spacer(Modifier.height(16.dp))
-        if (favorites.isEmpty()) Box(modifier = Modifier.fillMaxWidth().height(80.dp).background(cardColor, RoundedCornerShape(12.dp)).border(1.dp, borderColor, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Text("Sin colores guardados", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
-        else FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { favorites.forEach { favHex -> val color = ColorManager.hexToColor(favHex) ?: Color.Gray; Box(modifier = Modifier.size(60.dp).shadow(4.dp, boxShape).clip(boxShape).background(color).then(if (isGoldMode) Modifier.goldBorder(boxShape) else Modifier.border(1.5.dp, if (isDarkMode) Color.White.copy(0.2f) else Color.Black.copy(0.1f), boxShape)).combinedClickable(onClick = { onColorSelect(favHex) }, onLongClick = { onDeleteFavorite(favHex) })) { Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.White.copy(0.2f), Color.Transparent)))) } } }
-        Spacer(Modifier.height(32.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.AutoMirrored.Filled.LibraryBooks, null, tint = Color.Gray, modifier = Modifier.size(18.dp).then(if (isGoldMode) Modifier.goldMask() else Modifier)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.palettes_tab).uppercase(), color = if (isDarkMode) Color.LightGray else Color(0xFF444444), fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp, modifier = if (isGoldMode) Modifier.goldMask() else Modifier) }
-        Spacer(Modifier.height(16.dp))
-        if (parsedPalettes.isEmpty()) Box(modifier = Modifier.fillMaxWidth().height(120.dp).background(cardColor, RoundedCornerShape(12.dp)).then(if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(12.dp)) else Modifier.border(1.dp, borderColor, RoundedCornerShape(12.dp))), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Palette, null, tint = Color.Gray.copy(0.3f), modifier = Modifier.size(32.dp)); Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.no_palettes), color = Color.Gray, fontSize = 11.sp) } }
-        else parsedPalettes.forEach { (name, colors, originalJson) -> val cardShape = RoundedCornerShape(16.dp); Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp).then(if (isGoldMode) Modifier.goldBorder(cardShape) else Modifier), shape = cardShape, colors = CardDefaults.cardColors(containerColor = cardColor), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), border = if (isGoldMode) null else BorderStroke(1.dp, borderColor)) { Column(modifier = Modifier.padding(14.dp)) { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column(modifier = Modifier.weight(1f)) { Text(name.replace(".css", ""), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = if (isDarkMode) Color.White else Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis); Text("${colors.size} COLORES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 0.5.sp) }; IconButton(onClick = { onDeletePalette(originalJson) }, modifier = Modifier.size(32.dp).background(Color.Red.copy(0.1f), CircleShape)) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.8f), modifier = Modifier.size(16.dp)) } } ; Spacer(Modifier.height(12.dp)); Row(modifier = Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(8.dp)).then(if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(8.dp)) else Modifier.border(1.dp, borderColor, RoundedCornerShape(8.dp)))) { colors.forEach { colorHex -> val color = ColorManager.hexToColor(colorHex) ?: Color.Gray; Box(modifier = Modifier.weight(1f).fillMaxHeight().background(color).clickable { onColorSelect(colorHex) }) } } } } }
     }
 }
 
@@ -959,16 +1004,114 @@ fun CameraSniper(onColorCaptured: (Color) -> Unit, onColorConfirmed: (Color) -> 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportDialog(harmonyColors: List<Color>, onDismiss: () -> Unit, currentColor: Color, isGoldMode: Boolean, isDarkMode: Boolean) {
-    val clipboard = LocalClipboardManager.current; val context = LocalContext.current
-    BasicAlertDialog(onDismissRequest = onDismiss, modifier = Modifier.fillMaxWidth(0.9f).shadow(24.dp, RoundedCornerShape(24.dp)).clip(RoundedCornerShape(24.dp)).background(if (isDarkMode) Color.Black else (if (ColorManager.isDark(currentColor)) Color(0xFF1A1A1A) else Color.White)).then(if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(24.dp)) else Modifier)) {
-        Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("EXPORT PALETTE", style = TextStyle(fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 2.sp, color = if (isDarkMode) Color.White else (if (ColorManager.isDark(currentColor)) Color.White else Color.Black)), modifier = if (isGoldMode) Modifier.goldMask() else Modifier)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                listOf(Pair("CSS Variables") { clipboard.setText(AnnotatedString(harmonyColors.mapIndexed { i, c -> "--color-${i+1}: ${ColorManager.colorToHex(c)};" }.joinToString("\n"))) }, Pair("JSON Array") { clipboard.setText(AnnotatedString("[\n" + harmonyColors.joinToString(",\n") { "  \"${ColorManager.colorToHex(it)}\"" } + "\n]")) }, Pair("Android XML") { clipboard.setText(AnnotatedString(harmonyColors.mapIndexed { i, c -> "<color name=\"palette_${i+1}\">${ColorManager.colorToHex(c)}</color>" }.joinToString("\n"))) }).forEach { (label, action) ->
-                    Surface(onClick = { action(); Toast.makeText(context, "$label Copied!", Toast.LENGTH_SHORT).show(); onDismiss() }, modifier = Modifier.fillMaxWidth().height(48.dp).shadow(4.dp, RoundedCornerShape(12.dp)), shape = RoundedCornerShape(12.dp), color = if (isGoldMode) Color.Transparent else currentColor, border = BorderStroke(1.dp, Color.White.copy(0.3f))) { Box(modifier = Modifier.fillMaxSize().then(if (isGoldMode) Modifier.goldButtonStyle() else Modifier.background(Brush.verticalGradient(listOf(Color.White.copy(0.2f), Color.Transparent)))), contentAlignment = Alignment.Center) { Text(label, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = if (isGoldMode) Color(0xFF543B14) else (if (ColorManager.isDark(currentColor)) Color.White else Color.Black)) } }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // Obtenemos el idioma actual para los mensajes
+    val currentLocale = remember { java.util.Locale.getDefault().language }
+    var exportFormat by remember { mutableStateOf("css") }
+    var showFilePicker by remember { mutableStateOf(false) }
+
+    // Launcher para guardar archivos (SAF)
+    val createFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(
+            if (exportFormat == "json") "application/json" else if (exportFormat == "xml") "text/xml" else "text/css"
+        )
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                try {
+                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                        val content = when (exportFormat) {
+                            "css" -> harmonyColors.mapIndexed { i, c -> "--color-${i + 1}: ${ColorManager.colorToHex(c)};" }.joinToString("\n")
+                            "json" -> "[\n" + harmonyColors.joinToString(",\n") { "  \"${ColorManager.colorToHex(it)}\"" } + "\n]"
+                            "xml" -> "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n" + harmonyColors.mapIndexed { i, c -> "    <color name=\"palette_${i + 1}\">${ColorManager.colorToHex(c)}</color>" }.joinToString("\n") + "\n</resources>"
+                            else -> ""
+                        }
+                        outputStream.write(content.toByteArray())
+                    }
+                    val successMsg = if (currentLocale == "es") "Archivo guardado con éxito" else "File saved successfully"
+                    Toast.makeText(context, successMsg, Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                } catch (e: Exception) {
+                    val errorMsg = if (currentLocale == "es") "Error al guardar" else "Error saving file"
+                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                 }
             }
-            TextButton(onClick = onDismiss) { Text("CLOSE", fontWeight = FontWeight.Bold, color = Color.Gray) }
+        }
+    }
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .fillMaxWidth(0.9f)
+            .shadow(24.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isDarkMode) Color.Black else (if (ColorManager.isDark(currentColor)) Color(0xFF1A1A1A) else Color.White))
+            .then(if (isGoldMode) Modifier.goldBorder(RoundedCornerShape(24.dp)) else Modifier)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                "EXPORT PALETTE",
+                style = TextStyle(fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 2.sp, color = if (isDarkMode) Color.White else (if (ColorManager.isDark(currentColor)) Color.White else Color.Black)),
+                modifier = if (isGoldMode) Modifier.goldMask() else Modifier
+            )
+
+            // Selector de formato más bonito
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                val formats = listOf(
+                    Triple("CSS Variables", "css", "palette.css"),
+                    Triple("JSON Array", "json", "palette.json"),
+                    Triple("Android XML", "xml", "colors.xml")
+                )
+                
+                formats.forEach { (label, ext, defaultName) ->
+                    Surface(
+                        onClick = {
+                            exportFormat = ext
+                            createFileLauncher.launch(defaultName)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .shadow(4.dp, RoundedCornerShape(14.dp)),
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isGoldMode) Color.Transparent else currentColor,
+                        border = BorderStroke(1.dp, Color.White.copy(0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(if (isGoldMode) Modifier.goldButtonStyle() else Modifier.background(Brush.verticalGradient(listOf(Color.White.copy(0.2f), Color.Transparent)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (ext == "css") Icons.Default.Code else if (ext == "json") Icons.Default.DataArray else Icons.Default.Android,
+                                    contentDescription = null,
+                                    tint = if (isGoldMode) Color(0xFF543B14) else (if (ColorManager.isDark(currentColor)) Color.White else Color.Black),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    label,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 14.sp,
+                                    color = if (isGoldMode) Color(0xFF543B14) else (if (ColorManager.isDark(currentColor)) Color.White else Color.Black)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", fontWeight = FontWeight.Bold, color = Color.Gray)
+            }
         }
     }
 }
@@ -988,7 +1131,7 @@ fun SettingsDialog(isDarkMode: Boolean, onToggleDarkMode: () -> Unit, currentLoc
             SettingsSection(stringResource(R.string.system), sectionTitleColor) { SettingsItem(Icons.Default.Language, stringResource(R.string.language), cardBg, textColor, isDarkMode, onClick = onToggleLanguage) { Text(if (currentLocale == "es") "ES \uD83C\uDDEA\uD83C\uDDF8" else "EN \uD83C\uDDFA\uD83C\uDDF8", fontWeight = FontWeight.Bold, color = textColor, fontSize = 13.sp) } }
             Spacer(Modifier.height(16.dp))
             SettingsSection(stringResource(R.string.customization), sectionTitleColor) { SettingsItem(Icons.Default.Sync, stringResource(R.string.chaos_mode), cardBg, textColor, isDarkMode) { Switch(checked = isCaosMode, onCheckedChange = { onUpdateSettings(it, analogousCount, fixedUiColorHex, colorBlindnessMode, isGoldMode) }) }; Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.analogous_count, analogousCount), style = TextStyle(fontWeight = FontWeight.Bold, color = textColor, fontSize = 13.sp)); Slider(value = analogousCount.toFloat(), onValueChange = { onUpdateSettings(isCaosMode, it.toInt(), fixedUiColorHex, colorBlindnessMode, isGoldMode) }, valueRange = 5f..10f, steps = 4, colors = SliderDefaults.colors(thumbColor = if (isGoldMode) Color(0xFFC29B47) else textColor, activeTrackColor = if (isGoldMode) Color(0xFFC29B47) else textColor.copy(0.4f))); Spacer(Modifier.height(12.dp)); Text(stringResource(R.string.fixed_ui_color).uppercase(), style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = sectionTitleColor, letterSpacing = 1.sp)); Spacer(Modifier.height(8.dp)); LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(listOf("#268CEF", "#FFD700", "#FF5722", "#4CAF50") + favorites.toList()) { hex -> val color = ColorManager.hexToColor(hex) ?: Color.Gray; Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(color).border(if (hex == fixedUiColorHex) 3.dp else 1.dp, if (hex == fixedUiColorHex) (if (isGoldMode) Color(0xFFC29B47) else textColor) else textColor.copy(0.3f), CircleShape).clickable { onUpdateSettings(isCaosMode, analogousCount, hex, colorBlindnessMode, isGoldMode) }) } } }
-            Spacer(Modifier.height(32.dp)); Text("Version 1.0.4 PRO", fontSize = 11.sp, fontWeight = FontWeight.Black, color = sectionTitleColor.copy(0.5f)); Text("Created with ❤️ by JAYLIZ", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sectionTitleColor.copy(0.3f))
+            Spacer(Modifier.height(32.dp)); Text("Version 1.0.5 PRO", fontSize = 11.sp, fontWeight = FontWeight.Black, color = sectionTitleColor.copy(0.5f)); Text("Created with ❤️ by JAYLIZ", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sectionTitleColor.copy(0.3f))
         }
     }
 }
